@@ -63,18 +63,31 @@
       <div class="panel">
         <div class="panel-head">
           <h2 class="panel-title"><span class="step">01</span>Read the table</h2>
-          <span class="panel-note">Put an item in the table, then copy the three numbers down the right-hand side.</span>
+          <span class="panel-note">Copy the three numbers, and hover each slot for its hint — hints cut the readings needed from seven to two or three.</span>
         </div>
 
-        <form class="row" id="reading-form">
-          <label class="field row-fixed" style="flex:0 0 130px">
-            <span class="field-label">Bookshelves</span>
-            <select id="in-shelves"></select>
-          </label>
-          <label class="field"><span class="field-label">Top slot</span><input type="number" id="in-c1" min="0" max="30" inputmode="numeric"></label>
-          <label class="field"><span class="field-label">Middle slot</span><input type="number" id="in-c2" min="0" max="30" inputmode="numeric"></label>
-          <label class="field"><span class="field-label">Bottom slot</span><input type="number" id="in-c3" min="0" max="30" inputmode="numeric"></label>
-          <div class="row-fixed"><button class="btn btn-primary" type="submit">Add reading</button></div>
+        <form id="reading-form">
+          <div class="row">
+            <label class="field row-fixed" style="flex:0 0 130px">
+              <span class="field-label">Bookshelves</span>
+              <select id="in-shelves"></select>
+            </label>
+            <label class="field row-fixed" style="flex:1 1 200px">
+              <span class="field-label">Item in the table</span>
+              <select id="in-item"></select>
+            </label>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <label class="field"><span class="field-label">Top slot</span><input type="number" id="in-c1" min="0" max="30" inputmode="numeric"></label>
+            <label class="field"><span class="field-label">Middle slot</span><input type="number" id="in-c2" min="0" max="30" inputmode="numeric"></label>
+            <label class="field"><span class="field-label">Bottom slot</span><input type="number" id="in-c3" min="0" max="30" inputmode="numeric"></label>
+          </div>
+          <div class="row" style="margin-top:10px">
+            <label class="field"><span class="field-label">Top hint &nbsp;·&nbsp; hover the slot in game</span><select id="in-h1"></select></label>
+            <label class="field"><span class="field-label">Middle hint</span><select id="in-h2"></select></label>
+            <label class="field"><span class="field-label">Bottom hint</span><select id="in-h3"></select></label>
+            <div class="row-fixed"><button class="btn btn-primary" type="submit">Add reading</button></div>
+          </div>
         </form>
 
         <div class="readings" id="readings"></div>

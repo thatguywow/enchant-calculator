@@ -30,6 +30,7 @@
     seedLog: store.get('seedLog', []),
     playerLevel: store.get('playerLevel', 30),
     outItem: store.get('outItem', 'diamond_sword'),
+    readItem: store.get('readItem', 'book'),
     planItem: store.get('planItem', 'diamond_sword'),
     picks: store.get('picks', {}),          // ench -> level, or -1 for "refuse"
     freshCrack: false
@@ -38,7 +39,7 @@
     store.set('version', S.version); store.set('readings', S.readings);
     store.set('xpSeed', S.xpSeed); store.set('playerState', S.playerState);
     store.set('seedLog', S.seedLog); store.set('playerLevel', S.playerLevel);
-    store.set('outItem', S.outItem); store.set('planItem', S.planItem); store.set('picks', S.picks);
+    store.set('outItem', S.outItem); store.set('readItem', S.readItem); store.set('planItem', S.planItem); store.set('picks', S.picks);
   };
 
   const cracker = new window.ECCracker.Cracker();
@@ -62,6 +63,7 @@
     sel.addEventListener('change', () => {
       S.version = +sel.value; save();
       fillItems($('#out-item'), S.outItem); fillItems($('#plan-item'), S.planItem);
+      refreshReadingForm();
       renderOutcomes(); renderChips();
     });
   }
@@ -82,6 +84,27 @@
     sel.value = [...sel.options].some(o => o.value === current) ? current : firstOk;
     return sel.value;
   }
+
+  function hintOptions(sel, item) {
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">didn\u2019t note it</option>';
+    // any enchantment the table can ever show for this item, every level
+    P.offerable(item, S.version).forEach(o => {
+      for (let l = 1; l <= o.max; l++) {
+        const op = el('option', null, D.PRETTY[o.ench] + (o.max > 1 ? ' ' + D.roman(l) : ''));
+        op.value = o.ench + ':' + l;
+        sel.appendChild(op);
+      }
+    });
+    if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+  }
+
+  function refreshReadingForm() {
+    const item = fillItems($('#in-item'), S.readItem || 'book');
+    S.readItem = item;
+    ['#in-h1', '#in-h2', '#in-h3'].forEach(sel => hintOptions($(sel), item));
+  }
+  $('#in-item') && $('#in-item').addEventListener('change', () => { S.readItem = $('#in-item').value; save(); refreshReadingForm(); });
 
   function fillShelves() {
     const sel = $('#in-shelves');
@@ -109,7 +132,9 @@
       left.appendChild(el('span', 'reading-shelves', r.bookshelves + (r.bookshelves === 1 ? ' shelf' : ' shelves')));
       row.appendChild(left);
       const costs = el('div', 'reading-costs');
-      costs.innerHTML = [r.c1, r.c2, r.c3].map(c => c === 0 ? '<em>—</em>' : c).join(' &nbsp;/&nbsp; ');
+      const nClues = (r.clues || []).filter(Boolean).length;
+      costs.innerHTML = [r.c1, r.c2, r.c3].map(c => c === 0 ? '<em>—</em>' : c).join(' &nbsp;/&nbsp; ') +
+        (nClues ? ' <em>+' + nClues + ' hint' + (nClues > 1 ? 's' : '') + '</em>' : '');
       row.appendChild(costs);
       const del = el('button', 'btn btn-ghost btn-sm btn-danger', 'Remove');
       del.addEventListener('click', () => { S.readings.splice(i, 1); afterReadingsChange(); });
@@ -120,9 +145,9 @@
     const hint = $('#readings-hint'); hint.innerHTML = '';
     const distinct = new Set(S.readings.map(r => r.bookshelves)).size;
     if (S.readings.length && distinct < S.readings.length) {
-      hint.appendChild(mkNotice('warn', 'Two readings share a bookshelf count. The table always shows the same numbers for the same seed and the same shelves, so a repeat teaches this nothing — change the shelf count between readings.'));
+      hint.appendChild(mkNotice('warn', 'Two readings share a bookshelf count. Repeated numbers teach the search nothing — though hints still count if the item differs. Change the shelf count between readings where you can.'));
     } else if (distinct && distinct < 3) {
-      hint.appendChild(mkNotice('', 'Three readings cuts four billion seeds to a few thousand; six or seven normally leave exactly one. Block a bookshelf — a torch in the gap will do — and read the table again.'));
+      hint.appendChild(mkNotice('', 'With hints filled in, two or three readings pin the seed — numbers alone need six or seven. A <strong>book</strong> makes the best reading item: its hints carry the most information. Block a bookshelf and read again.'));
     }
     $('#btn-crack').disabled = busy || distinct < 2;
     fillShelves();
@@ -142,9 +167,24 @@
     if (vals.some(v => v === '')) { $('#in-c1').focus(); return; }
     const [c1, c2, c3] = vals.map(Number);
     if ([c1, c2, c3].some(c => isNaN(c) || c < 0 || c > 30)) return;
-    S.readings.push({ bookshelves: b, c1, c2, c3 });
+    const clues = ['#in-h1', '#in-h2', '#in-h3'].map(sel => {
+      const v = $(sel).value;
+      if (!v) return null;
+      const [ench, level] = v.split(':');
+      return { ench, level: +level };
+    });
+    const reading = { bookshelves: b, c1, c2, c3, item: $('#in-item').value, clues };
+    S.readings.push(reading);
     ['#in-c1', '#in-c2', '#in-c3'].forEach(s => $(s).value = '');
-    afterReadingsChange();
+    ['#in-h1', '#in-h2', '#in-h3'].forEach(s => $(s).value = '');
+    if (S.candidates && S.candidates.length) {
+      // a sweep has already run: narrow the survivors instantly
+      S.candidates = cracker.filterByClues(cracker.filter(S.candidates, [reading]), [reading], S.version);
+      save(); renderReadings();
+      renderCrackResult({ ms: 0, seeds: S.candidates });
+    } else {
+      afterReadingsChange();
+    }
     $('#in-shelves').focus();
   });
 
@@ -173,9 +213,9 @@
     busy = false; cancel.hidden = true;
     $('#progress-bar').style.width = '100%';
     $('#progress-eta').textContent = (res.ms / 1000).toFixed(1) + 's';
-    S.candidates = res.seeds;
+    S.candidates = cracker.filterByClues(res.seeds, S.readings, S.version);
     renderReadings();
-    renderCrackResult(res);
+    renderCrackResult({ ms: res.ms, cancelled: res.cancelled, overflow: res.overflow, seeds: S.candidates });
   }
   $('#btn-crack').addEventListener('click', runCrack);
   $('#btn-cancel').addEventListener('click', () => cracker.cancel());
@@ -224,7 +264,7 @@
       const r = { bookshelves: +$('#nx-b').value, c1: +$('#nx-1').value, c2: +$('#nx-2').value, c3: +$('#nx-3').value };
       if ([r.bookshelves, r.c1, r.c2, r.c3].some(isNaN)) return;
       S.readings.push(r); save();
-      S.candidates = cracker.filter(S.candidates, [r]);
+      S.candidates = cracker.filterByClues(cracker.filter(S.candidates, [r]), S.readings, S.version);
       renderReadings();
       renderCrackResult({ ms: 0, seeds: S.candidates });
     });
@@ -551,6 +591,7 @@
   /* ------------------------------------------------------------- boot */
   (async () => {
     fillVersions();
+    refreshReadingForm();
     fillItems($('#out-item'), S.outItem);
     fillItems($('#plan-item'), S.planItem);
     $('#player-level').value = S.playerLevel;

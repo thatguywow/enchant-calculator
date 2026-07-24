@@ -154,6 +154,39 @@
     filter(seeds, observations) { return filterList(this.ex, seeds, observations); }
 
     /**
+     * Second-stage filter: keep only candidates whose enchantment hints match
+     * what the table showed. Run after the numeric sweep — it is JS, not WASM,
+     * but the numeric stage has already cut millions down to thousands.
+     *
+     * observations: [{bookshelves, c1, c2, c3, item, clues:[{ench,level}|null x3]}]
+     * A null clue means "not recorded" and is skipped; an entry for an empty
+     * slot is ignored.
+     */
+    filterByClues(seeds, observations, version) {
+      const EC = root.ECEnchant;
+      const withClues = observations.filter(o => o.item && o.clues && o.clues.some(c => c));
+      if (!withClues.length || !seeds.length) return seeds;
+      const rand = new EC.JavaRandom();
+      const out = [];
+      outer: for (let i = 0; i < seeds.length; i++) {
+        const seed = seeds[i];
+        for (const o of withClues) {
+          const costs = [o.c1, o.c2, o.c3];
+          for (let slot = 0; slot < 3; slot++) {
+            const want = o.clues[slot];
+            if (!want || !costs[slot]) continue;
+            const list = EC.enchantmentsInTable(rand, seed, o.item, slot, costs[slot], version);
+            if (!list.length) continue outer;
+            const clue = list[rand.nextInt(list.length)];
+            if (clue.ench !== want.ench || clue.level !== want.level) continue outer;
+          }
+        }
+        out.push(seed);
+      }
+      return Int32Array.from(out);
+    }
+
+    /**
      * Recover the player's 48-bit RNG state from two XP seeds that are NOT
      * necessarily adjacent draws.
      *
