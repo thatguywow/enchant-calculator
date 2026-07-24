@@ -1,0 +1,159 @@
+/* =====================================================================
+ *  cracker.js — searching the 2^32 XP seed space
+ *
+ *  The whole seed space is split into tasks handed out to a pool of web
+ *  workers, each running the WebAssembly kernel. Every observation the
+ *  player types in (bookshelf count + the three numbers on the table) is
+ *  applied at once, so the space is only ever walked a single time.
+ * ===================================================================== */
+(function (root) {
+  'use strict';
+
+  const OBS_PTR = 0;                 // observation block lives at offset 0
+  const BUF_A   = 4096;              // primary candidate buffer
+  const CAP     = 1 << 20;           // 1M candidates per buffer (4 MiB)
+  const BUF_B   = BUF_A + CAP * 4;
+  const NEED_BYTES = BUF_B + CAP * 4;
+  const TASK    = 1 << 26;           // 67M seeds per task -> 64 tasks total
+  const TOTAL   = 4294967296;
+
+  function growTo(ex, bytes) {
+    const have = ex.memory.buffer.byteLength;
+    if (have < bytes) ex.memory.grow(Math.ceil((bytes - have) / 65536));
+  }
+
+  function writeObs(ex, observations) {
+    growTo(ex, NEED_BYTES);
+    const mem = new Int32Array(ex.memory.buffer);
+    observations.forEach((o, i) => {
+      mem[i * 4] = o.bookshelves; mem[i * 4 + 1] = o.c1; mem[i * 4 + 2] = o.c2; mem[i * 4 + 3] = o.c3;
+    });
+    return mem;
+  }
+
+  /** Run one task range; returns an Int32Array of survivors or null on overflow. */
+  function runTask(ex, start, count, observations) {
+    writeObs(ex, observations);
+    const n = ex.scan(start, count, OBS_PTR, observations.length, BUF_A, CAP);
+    if (n < 0) return null;
+    return new Int32Array(ex.memory.buffer, BUF_A, n).slice();
+  }
+
+  /** Filter an existing candidate list by more observations (instant). */
+  function filterList(ex, list, observations) {
+    if (!observations.length || !list.length) return list;
+    growTo(ex, NEED_BYTES);
+    let cur = list;
+    // chunk so we never exceed CAP in one call
+    const out = [];
+    for (let off = 0; off < cur.length; off += CAP) {
+      const part = cur.subarray(off, Math.min(off + CAP, cur.length));
+      const mem = writeObs(ex, observations);
+      mem.set(part, BUF_A / 4);
+      const n = ex.filter(BUF_A, part.length, OBS_PTR, observations.length, BUF_B);
+      const res = new Int32Array(ex.memory.buffer, BUF_B, n);
+      for (let i = 0; i < n; i++) out.push(res[i]);
+    }
+    return Int32Array.from(out);
+  }
+
+  /* ------------------------------------------------------------------ */
+
+  class Cracker {
+    constructor() {
+      this.ex = null;
+      this.workers = [];
+      this.useWorkers = true;
+      this.cancelled = false;
+    }
+
+    async init(workerUrl) {
+      this.ex = await root.ECKernel.load();
+      if (this.useWorkers && typeof Worker !== 'undefined') {
+        const n = Math.max(1, Math.min(16, (navigator.hardwareConcurrency || 4)));
+        try {
+          for (let i = 0; i < n; i++) this.workers.push(new Worker(workerUrl));
+        } catch (e) {
+          this.workers.forEach(w => w.terminate());
+          this.workers = [];
+        }
+      }
+      return this;
+    }
+
+    get threads() { return this.workers.length || 1; }
+
+    cancel() { this.cancelled = true; }
+
+    /**
+     * Full 2^32 sweep.
+     * @returns {Promise<{seeds:Int32Array, overflow:boolean, ms:number}>}
+     */
+    async scan(observations, onProgress) {
+      this.cancelled = false;
+      const t0 = performance.now();
+      const tasks = [];
+      for (let s = -2147483648; s < 2147483647; s += TASK) tasks.push(s);
+      let done = 0, overflow = false;
+      const results = [];
+
+      const report = () => onProgress && onProgress(done / tasks.length);
+
+      if (this.workers.length) {
+        let next = 0;
+        const runOne = (w) => new Promise(resolve => {
+          const pump = () => {
+            if (this.cancelled || overflow || next >= tasks.length) return resolve();
+            const start = tasks[next++];
+            w.onmessage = (ev) => {
+              if (ev.data.overflow) overflow = true;
+              else if (ev.data.seeds && ev.data.seeds.length) results.push(ev.data.seeds);
+              done++; report();
+              pump();
+            };
+            w.postMessage({ cmd: 'scan', start, count: TASK, obs: observations, cap: CAP });
+          };
+          pump();
+        });
+        await Promise.all(this.workers.map(runOne));
+      } else {
+        // single-threaded fallback (also used when workers are blocked on file://)
+        for (const start of tasks) {
+          if (this.cancelled || overflow) break;
+          const r = runTask(this.ex, start, TASK, observations);
+          if (r === null) { overflow = true; break; }
+          if (r.length) results.push(r);
+          done++; report();
+          await new Promise(r2 => setTimeout(r2, 0));   // keep the UI alive
+        }
+      }
+
+      let total = 0; results.forEach(r => total += r.length);
+      const seeds = new Int32Array(total);
+      let off = 0; results.forEach(r => { seeds.set(r, off); off += r.length; });
+      seeds.sort();
+      return { seeds, overflow, cancelled: this.cancelled, ms: performance.now() - t0 };
+    }
+
+    /** Narrow an existing candidate list — instantaneous, no sweep needed. */
+    filter(seeds, observations) { return filterList(this.ex, seeds, observations); }
+
+    /**
+     * Recover the player's 48-bit RNG state from two consecutive nextInt()
+     * results (i.e. two XP seeds with nothing else touching the RNG between).
+     * Returns the state *after* the second call, or null.
+     */
+    playerSeedFrom(xp1, xp2) {
+      const ex = this.ex;
+      growTo(ex, 65536);
+      const ok = ex.playerSeed(xp1 | 0, xp2 | 0, 2048);
+      if (!ok) return null;
+      const mem = new Int32Array(ex.memory.buffer);
+      const lo = mem[512] >>> 0, hi = mem[513] >>> 0;
+      return hi * 4294967296 + lo;
+    }
+  }
+
+  root.ECCracker = { Cracker, CAP, TASK, TOTAL };
+  if (typeof module !== 'undefined' && module.exports) module.exports = root.ECCracker;
+})(typeof globalThis !== 'undefined' ? globalThis : this);

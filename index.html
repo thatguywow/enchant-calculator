@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enchantment Seed Cracker — work out your XP seed and pick your enchantments</title>
+<meta name="description" content="Crack the hidden XP seed behind Minecraft's enchanting table in the browser, then find out exactly how many items to throw and how many bookshelves to block to get the enchantment you want.">
+<meta name="color-scheme" content="dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23A47CF3'/><text x='16' y='23' font-size='20' font-family='Georgia,serif' text-anchor='middle' fill='%230C0A14'>E</text></svg>">
+</head>
+<body>
+<div class="app">
+
+  <!-- ------------------------------------------------------------ rail -->
+  <nav class="rail" aria-label="Sections">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">E</div>
+      <div>
+        <div class="brand-name">Seed Cracker</div>
+        <div class="brand-sub">Enchanting</div>
+      </div>
+    </div>
+
+    <div class="nav" role="tablist">
+      <button class="nav-item" role="tab" data-view="crack" aria-current="true"><span class="nav-step">01</span> Crack the seed</button>
+      <button class="nav-item" role="tab" data-view="outcomes"><span class="nav-step">02</span> Outcomes</button>
+      <button class="nav-item" role="tab" data-view="plan"><span class="nav-step">03</span> Plan a throw</button>
+      <button class="nav-item" role="tab" data-view="guide"><span class="nav-step">?</span> How to use it</button>
+    </div>
+
+    <div class="rail-foot">
+      <div class="status">
+        <div class="pill" id="pill-seed"><span class="pill-label">XP seed</span><span class="pill-value" id="pill-seed-v">unknown</span></div>
+        <div class="pill" id="pill-rng"><span class="pill-label">Player RNG</span><span class="pill-value" id="pill-rng-v">unknown</span></div>
+      </div>
+      <label class="field">
+        <span class="field-label">Minecraft version</span>
+        <select id="version"></select>
+      </label>
+      <label class="field">
+        <span class="field-label">Your XP level</span>
+        <input type="number" id="player-level" min="0" max="300" value="30">
+      </label>
+    </div>
+  </nav>
+
+  <!-- ------------------------------------------------------------ main -->
+  <main class="main">
+  <div class="wrap">
+
+    <!-- =================================================== crack view -->
+    <section class="view is-active" id="view-crack" role="tabpanel">
+      <header class="page-head">
+        <div class="eyebrow">Four billion candidates, one answer</div>
+        <h1 class="page-title">Crack the seed</h1>
+        <p class="page-lede">Every enchantment your table will ever offer is decided by one hidden 32-bit number. Type in what the table shows you a few times and this finds it — the whole search space, in your browser.</p>
+      </header>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title"><span class="step">01</span>Read the table</h2>
+          <span class="panel-note">Put an item in the table, then copy the three numbers down the right-hand side.</span>
+        </div>
+
+        <form class="row" id="reading-form">
+          <label class="field row-fixed" style="flex:0 0 130px">
+            <span class="field-label">Bookshelves</span>
+            <select id="in-shelves"></select>
+          </label>
+          <label class="field"><span class="field-label">Top slot</span><input type="number" id="in-c1" min="0" max="30" inputmode="numeric"></label>
+          <label class="field"><span class="field-label">Middle slot</span><input type="number" id="in-c2" min="0" max="30" inputmode="numeric"></label>
+          <label class="field"><span class="field-label">Bottom slot</span><input type="number" id="in-c3" min="0" max="30" inputmode="numeric"></label>
+          <div class="row-fixed"><button class="btn btn-primary" type="submit">Add reading</button></div>
+        </form>
+
+        <div class="readings" id="readings"></div>
+        <div id="readings-hint" style="margin-top:12px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title"><span class="step">02</span>Search</h2>
+          <span class="panel-note" id="threads-note"></span>
+        </div>
+        <div class="row" style="margin-bottom:14px">
+          <div class="row-fixed"><button class="btn btn-primary" id="btn-crack" disabled>Crack the seed</button></div>
+          <div class="row-fixed"><button class="btn btn-ghost" id="btn-cancel" hidden>Stop</button></div>
+          <div class="row-fixed"><button class="btn btn-ghost btn-sm" id="btn-reset">Start over</button></div>
+        </div>
+        <div class="progress" hidden id="progress"><div class="progress-bar" id="progress-bar"></div></div>
+        <div class="progress-meta" hidden id="progress-meta"><span id="progress-pct">0%</span><span id="progress-eta"></span></div>
+        <div id="crack-result" style="margin-top:14px"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2 class="panel-title"><span class="step">03</span>Learn the player RNG</h2>
+          <span class="panel-note">Optional — needed only for throwing items.</span>
+        </div>
+        <p class="panel-note" style="margin-top:0">Your XP seed is one draw from the RNG that lives on your player. Crack it, enchant <em>once</em>, crack it again, and those two draws give away the generator's whole internal state — which is what lets you predict future seeds.</p>
+        <div id="seed-log"></div>
+        <div class="row" style="margin-top:12px">
+          <div class="row-fixed"><button class="btn" id="btn-rng" disabled>Work out the player RNG</button></div>
+          <div class="row-fixed"><button class="btn btn-ghost btn-sm" id="btn-manual">Enter values by hand</button></div>
+        </div>
+        <div id="rng-result" style="margin-top:12px"></div>
+        <div id="manual-box" hidden style="margin-top:12px">
+          <div class="row">
+            <label class="field"><span class="field-label">XP seed (hex)</span><input type="text" id="in-xpseed" placeholder="1A2B3C4D" spellcheck="false"></label>
+            <label class="field"><span class="field-label">Player RNG state (12 hex digits)</span><input type="text" id="in-state" placeholder="0123456789AB" spellcheck="false"></label>
+            <div class="row-fixed"><button class="btn" id="btn-manual-apply">Use these</button></div>
+          </div>
+          <p class="panel-note" style="margin-bottom:0">Matches the fields in Earthcomputer's desktop tool, so you can carry a session over.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================================================ outcomes view -->
+    <section class="view" id="view-outcomes" role="tabpanel">
+      <header class="page-head">
+        <div class="eyebrow">Same seed, sixteen answers</div>
+        <h1 class="page-title">Outcomes</h1>
+        <p class="page-lede">With the seed known, the table stops being random. Here is every offer it will make right now — one row per bookshelf count, so you can see exactly how many to block.</p>
+      </header>
+
+      <div class="panel">
+        <div class="row">
+          <label class="field"><span class="field-label">Item in the table</span><select id="out-item"></select></label>
+          <label class="field"><span class="field-label">Look for</span><select id="out-highlight"></select></label>
+          <label class="field row-fixed" style="flex:0 0 150px"><span class="field-label">Shelves you own</span><input type="number" id="out-maxshelves" min="0" max="15" value="15"></label>
+        </div>
+      </div>
+
+      <div class="panel" id="outcomes-panel">
+        <div id="outcomes-body"></div>
+      </div>
+    </section>
+
+    <!-- ==================================================== plan view -->
+    <section class="view" id="view-plan" role="tabpanel">
+      <header class="page-head">
+        <div class="eyebrow">Throw, then enchant</div>
+        <h1 class="page-title">Plan a throw</h1>
+        <p class="page-lede">Dropping an item nudges your player's RNG by exactly four steps. Enchanting draws the next number as your new seed. Count the throws correctly and you choose your own enchantment.</p>
+      </header>
+
+      <div class="panel">
+        <div class="row">
+          <label class="field"><span class="field-label">Item to enchant</span><select id="plan-item"></select></label>
+          <label class="field row-fixed" style="flex:0 0 150px"><span class="field-label">Max bookshelves</span><input type="number" id="plan-maxshelves" min="0" max="15" value="15"></label>
+          <label class="field row-fixed" style="flex:0 0 150px"><span class="field-label">Max items to throw</span><input type="number" id="plan-maxthrows" min="0" max="4096" value="512"></label>
+        </div>
+        <div style="margin-top:16px">
+          <div class="field-label" style="margin-bottom:8px">Click once to want it, twice to refuse it</div>
+          <div class="chips" id="plan-chips"></div>
+        </div>
+        <div class="row" style="margin-top:16px">
+          <div class="row-fixed"><button class="btn btn-primary" id="btn-plan">Find a plan</button></div>
+          <div class="row-fixed"><button class="btn btn-ghost btn-sm" id="btn-plan-clear">Clear picks</button></div>
+        </div>
+      </div>
+
+      <div id="plan-result"></div>
+    </section>
+
+    <!-- =================================================== guide view -->
+    <section class="view" id="view-guide" role="tabpanel">
+      <header class="page-head">
+        <div class="eyebrow">Read this before you start throwing diamonds</div>
+        <h1 class="page-title">How to use it</h1>
+      </header>
+      <div class="panel prose" id="guide-body"></div>
+    </section>
+
+  </div>
+  </main>
+</div>
+
+<script src="assets/js/data.js"></script>
+<script src="assets/js/enchant.js"></script>
+<script src="assets/js/kernel.js"></script>
+<script src="assets/js/cracker.js"></script>
+<script src="assets/js/planner.js"></script>
+<script src="assets/js/ui.js"></script>
+</body>
+</html>
