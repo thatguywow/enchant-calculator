@@ -266,16 +266,31 @@
   }
 
   $('#btn-rng').addEventListener('click', () => {
-    const n = S.seedLog.length;
-    const a = S.seedLog[n - 2].seed, b = S.seedLog[n - 1].seed;
-    const state = cracker.playerSeedFrom(a, b);
     const box = $('#rng-result'); box.innerHTML = '';
-    if (state === null) {
-      box.appendChild(mkNotice('bad', '<strong>Those two draws are not consecutive.</strong> Between the two enchantments something else used your player\u2019s randomness — most often a dropped item, a hit taken, eating, or an anvil. Enchant once more with nothing else going on, crack the seed again and retry.'));
+    const log = S.seedLog;
+    // Work backwards through adjacent pairs: the newest pair is the one most
+    // likely to be clean, and the very first seed you ever crack was drawn at
+    // an unknown moment in the past so it usually cannot be used at all.
+    let hit = null;
+    for (let i = log.length - 1; i >= 1 && !hit; i--) {
+      const r = cracker.playerSeedFromPair(log[i - 1].seed, log[i].seed, 64);
+      if (r) hit = { r, from: i - 1, to: i };
+    }
+    if (!hit) {
+      box.appendChild(mkNotice('bad',
+        '<strong>No pair of those seeds fits.</strong> The most common cause is order: each seed has to be cracked <em>right after</em> an enchantment, so the full round is ' +
+        '<strong>enchant \u2192 crack \u2192 enchant \u2192 crack</strong>. A seed cracked cold \u2014 before any enchanting \u2014 is stale and pairs with nothing. ' +
+        'Second most common: picking up XP orbs between the two enchantments. Bank your levels first.'));
+      box.appendChild(mkNotice('', 'Recovery is simple: enchant a dummy item (slot 1 on anything is fine), crack, enchant again, crack again, press this button. The last two seeds are the pair.'));
       return;
     }
-    S.playerState = state; S.xpSeed = b; save(); renderStatus();
-    box.appendChild(mkNotice('good', '<strong>Player RNG locked on.</strong> Internal state <code>' + hex12(state) + '</code>. Every future seed is now predictable, so you can throw items to choose one.'));
+    const { r } = hit;
+    S.playerState = r.state; S.xpSeed = log[hit.to].seed; save(); renderStatus();
+    box.appendChild(mkNotice('good',
+      '<strong>Player RNG locked on.</strong> Internal state <code>' + hex12(r.state) + '</code>, from draws ' +
+      (hit.from + 1) + ' and ' + (hit.to + 1) + '. Every future seed is now predictable, so you can throw items to choose one.'));
+    if (r.gap > 0) box.appendChild(mkNotice('warn',
+      '<strong>Something used ' + r.gap + ' extra call' + (r.gap === 1 ? '' : 's') + ' in between</strong> — a dropped item is 4, equipping armour is 2. Accounted for, but keep it quiet from here or the throw counts will drift.'));
   });
 
   $('#btn-manual').addEventListener('click', () => { const m = $('#manual-box'); m.hidden = !m.hidden; });
@@ -496,13 +511,21 @@
 
     <h3>Throwing items to choose your seed</h3>
     <p>The XP seed is drawn from an ordinary Java random number generator attached to your player, and that generator is used for other things too. Dropping an item spends exactly four steps of it, working out the item's velocity. Enchanting spends one, and that one becomes your next seed.</p>
-    <p>So: crack the seed, enchant once, crack it again. Two consecutive draws are enough to recover the generator's entire 48-bit state. From then on this can tell you how many items to drop so that the <em>next</em> seed is the one you want.</p>
+    <p>The procedure, straight from Earthcomputer's own tutorial \u2014 note it <em>starts</em> with an enchantment:</p>
+    <ol>
+      <li><strong>Enchant a dummy item</strong> \u2014 slot 1 on a throwaway stone sword costs 1 level. This rerolls the seed, so the one you crack next is fresh.</li>
+      <li><strong>Crack the seed.</strong> This is draw one.</li>
+      <li><strong>Enchant another dummy item.</strong> Nothing else in between \u2014 no XP, no damage, no food, no dropped items.</li>
+      <li><strong>Crack again.</strong> This is draw two.</li>
+      <li>Press <em>Work out the player RNG</em>.</li>
+    </ol>
+    <p>A seed cracked cold \u2014 hours after your last enchantment, or before you ever enchanted \u2014 was drawn at some unknown moment in the past and pairs with nothing. Fresh is the whole trick. From then on the planner can tell you how many items to drop so that the <em>next</em> seed is the one you want.</p>
     <p>The plan comes out as: throw <em>n</em> items, spend one level on a throwaway enchantment to roll the new seed, set the bookshelves, click the slot.</p>
 
     <h3>Things that break the tracking</h3>
     <p>Anything else that touches your player's randomness will desynchronise the count. Between the two enchantments you use to learn the RNG — and between a plan and carrying it out — avoid:</p>
     <ul class="kbd-list">
-      <li>picking up XP orbs</li>
+      <li><strong>picking up XP orbs</strong> \u2014 bank your levels first</li>
       <li>taking damage</li>
       <li>eating or drinking</li>
       <li>using an anvil</li>

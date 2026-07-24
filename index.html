@@ -99,9 +99,9 @@
       <div class="panel">
         <div class="panel-head">
           <h2 class="panel-title"><span class="step">03</span>Learn the player RNG</h2>
-          <span class="panel-note">Optional — needed only for throwing items.</span>
+          <span class="panel-note">Optional — needed only for throwing items. Enchant, crack, enchant, crack.</span>
         </div>
-        <p class="panel-note" style="margin-top:0">Your XP seed is one draw from the RNG that lives on your player. Crack it, enchant <em>once</em>, crack it again, and those two draws give away the generator's whole internal state — which is what lets you predict future seeds.</p>
+        <p class="panel-note" style="margin-top:0">The order matters: <strong>enchant something first, then crack.</strong> That makes the seed fresh — drawn right in front of you. Do it twice — enchant, crack, enchant, crack — then press the button. Between the two enchantments: no XP pickup, no damage, no eating, no dropped items.</p>
         <div id="seed-log"></div>
         <div class="row" style="margin-top:12px">
           <div class="row-fixed"><button class="btn" id="btn-rng" disabled>Work out the player RNG</button></div>

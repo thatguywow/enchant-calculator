@@ -154,9 +154,41 @@
     filter(seeds, observations) { return filterList(this.ex, seeds, observations); }
 
     /**
-     * Recover the player's 48-bit RNG state from two consecutive nextInt()
-     * results (i.e. two XP seeds with nothing else touching the RNG between).
-     * Returns the state *after* the second call, or null.
+     * Recover the player's 48-bit RNG state from two XP seeds that are NOT
+     * necessarily adjacent draws.
+     *
+     * The first seed pins 32 of the 48 state bits; the low 16 are brute
+     * forced. Rather than demanding the second seed be the very next draw,
+     * this also allows up to maxGap unknown calls in between and reports how
+     * many there were — so one stray item drop (4 calls) or a sip of a potion
+     * no longer throws the whole session away.
+     *
+     * Returns { state, gap } — state being the value *after* the second
+     * draw — or null if no explanation fits.
+     */
+    playerSeedFromPair(xp1, xp2, maxGap) {
+      const EC = root.ECEnchant;
+      const gapMax = maxGap === undefined ? 64 : maxGap;
+      const hi = (xp1 >>> 0) * 65536;          // top 32 bits of the state
+      const want = xp2 | 0;
+      let best = null;
+      for (let lo = 0; lo < 65536; lo++) {
+        let st = hi + lo;
+        for (let k = 0; k <= gapMax; k++) {
+          st = EC.lcgNext(st);
+          if (EC.stateToInt(st) === want) {
+            if (!best || k < best.gap) best = { state: st, gap: k };
+            break;
+          }
+        }
+        if (best && best.gap === 0) break;     // adjacent draws: nothing beats it
+      }
+      return best;
+    }
+
+    /**
+     * Strict version: the two draws must be adjacent. Kept because it is what
+     * the desktop tool does, and it cannot report a false positive.
      */
     playerSeedFrom(xp1, xp2) {
       const ex = this.ex;
