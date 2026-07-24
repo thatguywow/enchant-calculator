@@ -17,6 +17,7 @@ async function ready() {
 
 self.onmessage = async (ev) => {
   const { cmd, start, count, obs, cap } = ev.data;
+  if (cmd === 'ping') { self.postMessage({ pong: true }); return; }
   if (cmd !== 'scan') return;
   const k = await ready();
   const need = BUF_A + cap * 4;

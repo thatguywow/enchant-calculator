@@ -64,21 +64,36 @@
       this.ex = null;
       this.workers = [];
       this.useWorkers = true;
+      this.workerError = null;
       this.cancelled = false;
     }
 
     async init(workerUrl) {
       this.ex = await root.ECKernel.load();
-      if (this.useWorkers && typeof Worker !== 'undefined') {
+      if (workerUrl && this.useWorkers && typeof Worker !== 'undefined') {
         const n = Math.max(1, Math.min(16, (navigator.hardwareConcurrency || 4)));
         try {
           for (let i = 0; i < n; i++) this.workers.push(new Worker(workerUrl));
+          // A missing or broken worker file fails asynchronously rather than
+          // throwing, so prove one can answer before trusting the pool.
+          await this._probe(this.workers[0]);
         } catch (e) {
-          this.workers.forEach(w => w.terminate());
+          this.workerError = String(e && e.message || e);
+          this.workers.forEach(w => { try { w.terminate(); } catch (e2) {} });
           this.workers = [];
         }
       }
       return this;
+    }
+
+    _probe(w, timeout) {
+      return new Promise((resolve, reject) => {
+        const done = (fn, arg) => { clearTimeout(timer); w.onmessage = null; w.onerror = null; fn(arg); };
+        const timer = setTimeout(() => done(reject, new Error('worker did not respond')), timeout || 5000);
+        w.onerror = () => done(reject, new Error('worker.js failed to load'));
+        w.onmessage = ev => ev.data && ev.data.pong ? done(resolve) : done(reject, new Error('unexpected reply'));
+        w.postMessage({ cmd: 'ping' });
+      });
     }
 
     get threads() { return this.workers.length || 1; }

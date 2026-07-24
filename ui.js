@@ -534,9 +534,13 @@
     renderReadings(); renderStatus(); renderSeedLog(); renderChips();
     await cracker.init('worker.js');
     const t = cracker.threads;
-    $('#threads-note').textContent = t > 1
-      ? 'Searching on ' + t + ' threads — a few seconds.'
-      : 'Single-threaded — the sweep takes about half a minute. Serve the folder over http to use every core.';
+    if (t > 1) $('#threads-note').textContent = 'Searching on ' + t + ' threads — a few seconds.';
+    else if (cracker.workerError) {
+      $('#threads-note').textContent = 'Single-threaded — the sweep takes about half a minute.';
+      $('#crack-result').appendChild(mkNotice('warn',
+        '<strong>worker.js could not be loaded, so the search is running on one thread.</strong> ' +
+        'It still works, it just takes about 30 seconds instead of a few. Check that worker.js sits next to index.html.'));
+    } else $('#threads-note').textContent = 'Single-threaded — the sweep takes about half a minute. Serve the folder over http to use every core.';
     renderReadings();
   })();
 })();
