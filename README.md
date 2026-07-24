@@ -30,8 +30,7 @@ Three stages, exactly as in the original:
 ## Running it
 
 Any static host works. For GitHub Pages: push the repository, then
-**Settings → Pages → Deploy from branch → `main` / root**. The `.nojekyll` file is
-there so Pages serves the `assets` folder untouched.
+**Settings → Pages → Deploy from branch → `main` / root**. Nothing here starts with an underscore, so Jekyll leaves it alone and no `.nojekyll` file is needed.
 
 Locally you need a server, because the workers are separate files:
 
@@ -46,7 +45,7 @@ so the sweep falls back to a single thread and takes about half a minute.
 ## Verifying it
 
 The simulation is not a re-derivation from the wiki; it is a port, checked against
-the original Java. `tools/` holds the checks:
+the original Java. the checks are in the [full project](https://github.com/Earthcomputer/EnchantmentCracker):
 
 | script | what it proves |
 | --- | --- |
@@ -72,15 +71,17 @@ is reviewable.
 
 ```
 index.html
-assets/css/style.css
-assets/js/data.js       item + enchantment tables (port of Items.java, Enchantments.java)
-assets/js/enchant.js    java.util.Random and the enchanting table simulation
-assets/js/kernel.js     WebAssembly brute-force kernel, base64 embedded
-assets/js/cracker.js    worker pool, sweep orchestration, player RNG recovery
-assets/js/planner.js    throw / bookshelf / slot search
-assets/js/worker.js     scan worker
-assets/js/ui.js         the interface
+style.css
+data.js       item + enchantment tables (port of Items.java, Enchantments.java)
+enchant.js    java.util.Random and the enchanting table simulation
+kernel.js     WebAssembly brute-force kernel, base64 embedded
+cracker.js    worker pool, sweep orchestration, player RNG recovery
+planner.js    throw / bookshelf / slot search
+worker.js     scan worker
+ui.js         the interface
 ```
+
+All nine files live at the repository root. Every one is required.
 
 ## What it will not do
 

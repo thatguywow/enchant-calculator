@@ -532,7 +532,7 @@
     fillItems($('#plan-item'), S.planItem);
     $('#player-level').value = S.playerLevel;
     renderReadings(); renderStatus(); renderSeedLog(); renderChips();
-    await cracker.init('assets/js/worker.js');
+    await cracker.init('worker.js');
     const t = cracker.threads;
     $('#threads-note').textContent = t > 1
       ? 'Searching on ' + t + ' threads — a few seconds.'
