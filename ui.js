@@ -251,24 +251,18 @@
       verifyPrediction(box);
       return;
     }
-    box.appendChild(mkNotice('', '<strong>' + n.toLocaleString() + ' candidate' + (n===1?'':'s') + ' left.</strong> Change the bookshelf count, read the table again and add it below. Narrowing is instant from here — no second sweep.'));
-    const form = el('form', 'row'); form.style.marginTop = '12px';
-    form.innerHTML =
-      '<label class="field row-fixed" style="flex:0 0 130px"><span class="field-label">Bookshelves</span><input type="number" min="0" max="15" id="nx-b"></label>' +
-      '<label class="field"><span class="field-label">Top</span><input type="number" min="0" max="30" id="nx-1"></label>' +
-      '<label class="field"><span class="field-label">Middle</span><input type="number" min="0" max="30" id="nx-2"></label>' +
-      '<label class="field"><span class="field-label">Bottom</span><input type="number" min="0" max="30" id="nx-3"></label>' +
-      '<div class="row-fixed"><button class="btn btn-primary" type="submit">Narrow it down</button></div>';
-    form.addEventListener('submit', ev => {
-      ev.preventDefault();
-      const r = { bookshelves: +$('#nx-b').value, c1: +$('#nx-1').value, c2: +$('#nx-2').value, c3: +$('#nx-3').value };
-      if ([r.bookshelves, r.c1, r.c2, r.c3].some(isNaN)) return;
-      S.readings.push(r); save();
-      S.candidates = cracker.filterByClues(cracker.filter(S.candidates, [r]), S.readings, S.version);
-      renderReadings();
-      renderCrackResult({ ms: 0, seeds: S.candidates });
+    box.appendChild(mkNotice('',
+      '<strong>' + n.toLocaleString() + ' candidate' + (n === 1 ? '' : 's') + ' left.</strong> ' +
+      'Block a bookshelf, read the table again and add it in step 01 above \u2014 hints included. ' +
+      'It narrows instantly from here; there is no second sweep.'));
+    const up = el('button', 'btn btn-sm', 'Add another reading \u2191');
+    up.style.marginTop = '10px';
+    up.addEventListener('click', () => {
+      const form = $('#reading-form');
+      if (form.scrollIntoView) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      $('#in-shelves').focus();
     });
-    box.appendChild(form);
+    box.appendChild(up);
   }
 
   /* -------------------------------------------------- seeds & the RNG */
