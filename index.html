@@ -102,7 +102,8 @@
         <div class="row" style="margin-bottom:14px">
           <div class="row-fixed"><button class="btn btn-primary" id="btn-crack" disabled>Crack the seed</button></div>
           <div class="row-fixed"><button class="btn btn-ghost" id="btn-cancel" hidden>Stop</button></div>
-          <div class="row-fixed"><button class="btn btn-ghost btn-sm" id="btn-reset">Start over</button></div>
+          <div class="row-fixed"><button class="btn btn-ghost btn-sm" id="btn-newround" title="Empty the readings to crack a new seed, but keep the seeds you already captured">New reading round</button></div>
+          <div class="row-fixed"><button class="btn btn-ghost btn-sm btn-danger" id="btn-reset" title="Wipe everything, including captured seeds">Start over</button></div>
         </div>
         <div class="progress" hidden id="progress"><div class="progress-bar" id="progress-bar"></div></div>
         <div class="progress-meta" hidden id="progress-meta"><span id="progress-pct">0%</span><span id="progress-eta"></span></div>
@@ -114,7 +115,7 @@
           <h2 class="panel-title"><span class="step">03</span>Learn the player RNG</h2>
           <span class="panel-note">Optional — needed only for throwing items. Enchant, crack, enchant, crack.</span>
         </div>
-        <p class="panel-note" style="margin-top:0">The order matters: <strong>enchant something first, then crack.</strong> That makes the seed fresh — drawn right in front of you. Do it twice — enchant, crack, enchant, crack — then press the button. Between the two enchantments: no XP pickup, no damage, no eating, no dropped items.</p>
+        <p class="panel-note" style="margin-top:0">Fill both slots with seeds from two <strong>consecutive</strong> enchantments, then press the button. Use <strong>New reading round</strong> above between them — it clears the readings but keeps the first seed.</p>
         <div id="seed-log"></div>
         <div class="row" style="margin-top:12px">
           <div class="row-fixed"><button class="btn" id="btn-rng" disabled>Work out the player RNG</button></div>

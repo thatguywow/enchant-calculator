@@ -28,6 +28,7 @@
     xpSeed: store.get('xpSeed', null),
     playerState: store.get('playerState', null),
     seedLog: store.get('seedLog', []),
+    captured: store.get('captured', []),
     playerLevel: store.get('playerLevel', 30),
     outItem: store.get('outItem', 'diamond_sword'),
     readItem: store.get('readItem', 'book'),
@@ -38,7 +39,7 @@
   const save = () => {
     store.set('version', S.version); store.set('readings', S.readings);
     store.set('xpSeed', S.xpSeed); store.set('playerState', S.playerState);
-    store.set('seedLog', S.seedLog); store.set('playerLevel', S.playerLevel);
+    store.set('seedLog', S.seedLog); store.set('captured', S.captured); store.set('playerLevel', S.playerLevel);
     store.set('outItem', S.outItem); store.set('readItem', S.readItem); store.set('planItem', S.planItem); store.set('picks', S.picks);
   };
 
@@ -190,8 +191,22 @@
 
   $('#btn-reset').addEventListener('click', () => {
     S.readings = []; S.candidates = null; S.xpSeed = null; S.playerState = null; S.seedLog = [];
+    S.captured = [];
     afterReadingsChange(); renderStatus(); renderSeedLog(); $('#rng-result').innerHTML = '';
   });
+
+  // Clears the readings so you can crack a NEW seed, but keeps everything you
+  // have already captured (seed log, player state). This is the button that was
+  // missing: cracking the second seed for the player RNG needs fresh readings
+  // but must NOT wipe the first seed.
+  function newReadingRound() {
+    S.readings = []; S.candidates = null;
+    save(); renderReadings(); $('#crack-result').innerHTML = '';
+    const form = $('#reading-form');
+    if (form && form.scrollIntoView) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    $('#in-shelves') && $('#in-shelves').focus();
+  }
+  $('#btn-newround') && $('#btn-newround').addEventListener('click', newReadingRound);
 
   /* ------------------------------------------------------------ crack */
   async function runCrack() {
@@ -249,6 +264,23 @@
       card.appendChild(go);
       box.appendChild(card);
       verifyPrediction(box);
+
+      // Offer the obvious next action right here, so nobody has to hand-delete
+      // readings to crack a second seed.
+      const next = el('div', 'row'); next.style.marginTop = '14px';
+      const nr = el('button', 'btn', 'Clear readings, crack another seed →');
+      nr.title = 'Keeps this seed in the log; empties the readings so you can crack the next one';
+      nr.addEventListener('click', newReadingRound);
+      next.appendChild(nr);
+      if (S.playerState === null) {
+        const hint = el('span', 'seed-side');
+        hint.style.alignSelf = 'center';
+        hint.innerHTML = S.seedLog.length >= 2
+          ? 'You have two seeds — head to <b>step 03</b> to lock the player RNG.'
+          : 'For item-throwing: enchant a dummy item, then crack again.';
+        next.appendChild(hint);
+      }
+      box.appendChild(next);
       return;
     }
     box.appendChild(mkNotice('',
@@ -267,9 +299,15 @@
 
   /* -------------------------------------------------- seeds & the RNG */
   function recordSeed(seed) {
-    if (S.seedLog.length && S.seedLog[S.seedLog.length - 1].seed === seed) return;
-    S.seedLog.push({ seed, at: Date.now() });
-    if (S.seedLog.length > 8) S.seedLog.shift();
+    if (!(S.seedLog.length && S.seedLog[S.seedLog.length - 1].seed === seed)) {
+      S.seedLog.push({ seed, at: Date.now() });
+      if (S.seedLog.length > 8) S.seedLog.shift();
+    }
+    // Auto-fill the next empty capture slot, so a straight run of
+    // enchant/crack/enchant/crack just works without extra clicks.
+    const cap = S.captured || (S.captured = []);
+    if (cap[0] == null) cap[0] = seed;
+    else if (cap[1] == null && seed !== cap[0]) cap[1] = seed;
   }
 
   function verifyPrediction(box) {
@@ -282,49 +320,83 @@
     }
   }
 
+  // The player-RNG panel is a guided two-slot capture. Slot 1 takes the seed
+  // from your first post-enchant crack, slot 2 from the second. They must be
+  // consecutive draws, so the panel spells out the exact procedure and only
+  // fills a slot from a seed you actually cracked.
   function renderSeedLog() {
     const box = $('#seed-log'); box.innerHTML = '';
-    if (!S.seedLog.length) { box.appendChild(el('div', 'empty', 'Seeds you crack are listed here.')); }
-    else {
-      const list = el('div', 'readings');
-      S.seedLog.forEach((s, i) => {
-        const row = el('div', 'reading');
-        row.appendChild(el('span', 'reading-shelves', 'draw ' + (i + 1)));
-        row.appendChild(el('span', 'reading-costs', hex8(s.seed)));
-        row.appendChild(el('span', 'seed-side', i === S.seedLog.length - 1 ? 'current' : ''));
-        list.appendChild(row);
-      });
-      box.appendChild(list);
+    const cap = S.captured || (S.captured = []);
+
+    const wrap = el('div', 'capture');
+    const slot = (idx) => {
+      const cell = el('div', 'capture-slot' + (cap[idx] != null ? ' is-filled' : ''));
+      cell.appendChild(el('div', 'field-label', idx === 0 ? 'First seed' : 'Second seed'));
+      const val = el('div', 'capture-val');
+      val.textContent = cap[idx] != null ? hex8(cap[idx]) : '\u2014';
+      cell.appendChild(val);
+      const act = el('div', 'capture-act');
+      if (S.xpSeed != null && cap[idx] !== S.xpSeed) {
+        const use = el('button', 'btn btn-sm', cap[idx] != null ? 'Replace with ' + hex8(S.xpSeed) : 'Use current seed ' + hex8(S.xpSeed));
+        use.addEventListener('click', () => { cap[idx] = S.xpSeed; if (idx === 0 && cap[1] === S.xpSeed) cap[1] = null; save(); renderSeedLog(); });
+        act.appendChild(use);
+      }
+      if (cap[idx] != null) {
+        const clr = el('button', 'btn btn-sm btn-ghost btn-danger', 'Clear');
+        clr.addEventListener('click', () => { cap[idx] = null; save(); renderSeedLog(); });
+        act.appendChild(clr);
+      }
+      cell.appendChild(act);
+      return cell;
+    };
+    wrap.appendChild(slot(0));
+    const arrow = el('div', 'capture-arrow', '\u2192'); wrap.appendChild(arrow);
+    wrap.appendChild(slot(1));
+    box.appendChild(wrap);
+
+    // guidance depends on how far along you are
+    const have = cap.filter(x => x != null).length;
+    const tip = el('div'); tip.style.marginTop = '12px';
+    if (have === 0) {
+      tip.appendChild(mkNotice('', '<strong>Do this in order.</strong> 1) Enchant a dummy item (slot 1 on a stone sword, 1 level). 2) Read the table and crack — press <em>Use current seed</em> for the first slot. 3) Enchant another dummy, nothing in between. 4) Crack again and fill the second slot. 5) Press <em>Work out the player RNG</em>.'));
+    } else if (have === 1) {
+      tip.appendChild(mkNotice('warn', '<strong>One to go.</strong> Enchant a second dummy item — <em>no XP pickup, no damage, no eating, no dropping items</em> — then crack again and fill the second slot with that seed.'));
+    } else {
+      tip.appendChild(mkNotice('good', '<strong>Both seeds captured.</strong> Press <em>Work out the player RNG</em>.'));
     }
-    $('#btn-rng').disabled = S.seedLog.length < 2;
+    box.appendChild(tip);
+
+    $('#btn-rng').disabled = have < 2;
   }
 
   $('#btn-rng').addEventListener('click', () => {
     const box = $('#rng-result'); box.innerHTML = '';
-    const log = S.seedLog;
-    // Work backwards through adjacent pairs: the newest pair is the one most
-    // likely to be clean, and the very first seed you ever crack was drawn at
-    // an unknown moment in the past so it usually cannot be used at all.
-    let hit = null;
-    for (let i = log.length - 1; i >= 1 && !hit; i--) {
-      const r = cracker.playerSeedFromPair(log[i - 1].seed, log[i].seed, 64);
-      if (r) hit = { r, from: i - 1, to: i };
-    }
-    if (!hit) {
-      box.appendChild(mkNotice('bad',
-        '<strong>No pair of those seeds fits.</strong> The most common cause is order: each seed has to be cracked <em>right after</em> an enchantment, so the full round is ' +
-        '<strong>enchant \u2192 crack \u2192 enchant \u2192 crack</strong>. A seed cracked cold \u2014 before any enchanting \u2014 is stale and pairs with nothing. ' +
-        'Second most common: picking up XP orbs between the two enchantments. Bank your levels first.'));
-      box.appendChild(mkNotice('', 'Recovery is simple: enchant a dummy item (slot 1 on anything is fine), crack, enchant again, crack again, press this button. The last two seeds are the pair.'));
+    const cap = S.captured || [];
+    const a = cap[0], b = cap[1];
+    if (a == null || b == null) return;
+    if (a === b) {
+      box.appendChild(mkNotice('bad', '<strong>Both slots hold the same seed.</strong> They must come from two <em>different</em> enchantments. Enchant a dummy item again, crack, and put that new seed in the second slot.'));
       return;
     }
-    const { r } = hit;
-    S.playerState = r.state; S.xpSeed = log[hit.to].seed; save(); renderStatus();
-    box.appendChild(mkNotice('good',
-      '<strong>Player RNG locked on.</strong> Internal state <code>' + hex12(r.state) + '</code>, from draws ' +
-      (hit.from + 1) + ' and ' + (hit.to + 1) + '. Every future seed is now predictable, so you can throw items to choose one.'));
-    if (r.gap > 0) box.appendChild(mkNotice('warn',
-      '<strong>Something used ' + r.gap + ' extra call' + (r.gap === 1 ? '' : 's') + ' in between</strong> — a dropped item is 4, equipping armour is 2. Accounted for, but keep it quiet from here or the throw counts will drift.'));
+    // Strict first: exactly-consecutive draws, like both reference tools.
+    let r = cracker.playerSeedFromPair(a, b, 0);
+    if (r) {
+      S.playerState = r.state; S.xpSeed = b; save(); renderStatus();
+      box.appendChild(mkNotice('good', '<strong>Player RNG locked on.</strong> Internal state <code>' + hex12(r.state) + '</code>. Every future seed is now predictable — go to <em>Plan a throw</em> to choose one.'));
+      return;
+    }
+    // Fallback: allow a small gap, but be honest that it is a guess.
+    r = cracker.playerSeedFromPair(a, b, 48);
+    if (r) {
+      box.appendChild(mkNotice('warn', '<strong>Those two seeds are not consecutive</strong> — something used the RNG in between (' + r.gap + ' hidden call' + (r.gap === 1 ? '' : 's') + '; a dropped item is 4, armour is 2, a taken hit is 1). ' +
+        'I can lock on assuming exactly that, but if anything random happened it may be wrong. Safer to redo it clean.'));
+      const use = el('button', 'btn btn-sm'); use.style.marginTop = '10px';
+      use.textContent = 'Lock on anyway (gap ' + r.gap + ')';
+      use.addEventListener('click', () => { S.playerState = r.state; S.xpSeed = b; save(); renderStatus(); box.innerHTML = ''; box.appendChild(mkNotice('good', '<strong>Locked on with a gap of ' + r.gap + '.</strong> Watch the first prediction closely; if it is wrong, redo the capture with nothing happening between the two enchantments.')); });
+      box.appendChild(use);
+      return;
+    }
+    box.appendChild(mkNotice('bad', '<strong>No player state fits these two seeds at all.</strong> Too much happened between them, or one seed was mis-cracked. The reliable recipe: bank your XP first, stand somewhere safe and still, then enchant → crack → enchant → crack with nothing in between.'));
   });
 
   $('#btn-manual').addEventListener('click', () => { const m = $('#manual-box'); m.hidden = !m.hidden; });

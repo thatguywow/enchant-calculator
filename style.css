@@ -328,3 +328,23 @@ table.grid tr.is-hit td { background: rgba(127,224,74,.07); }
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .001ms !important; transition-duration: .001ms !important; }
 }
+
+/* --------------------------------------------------- player RNG capture */
+.capture { display: flex; align-items: stretch; gap: 12px; }
+.capture-slot {
+  flex: 1 1 0; min-width: 0;
+  border: 1px solid var(--line); border-radius: var(--r-ctl);
+  background: var(--obsidian); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.capture-slot.is-filled { border-color: rgba(127,224,74,.45); }
+.capture-val {
+  font-family: var(--mono); font-size: 22px; letter-spacing: .05em; color: var(--muted);
+}
+.capture-slot.is-filled .capture-val { color: var(--xp); }
+.capture-act { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+.capture-arrow { align-self: center; color: var(--arcane); font-family: var(--mono); font-size: 20px; }
+@media (max-width: 640px) {
+  .capture { flex-direction: column; }
+  .capture-arrow { transform: rotate(90deg); }
+}
