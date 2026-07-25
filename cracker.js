@@ -220,6 +220,23 @@
     }
 
     /**
+     * Event-aware recovery. Tries strict-consecutive first, then each plausible
+     * gap, and reports which known action (or how many raw calls) explains it.
+     * combos: array of {gap, label} to try in order after the strict attempt.
+     */
+    playerSeedExplained(xp1, xp2, combos) {
+      let r = this.playerSeedFromPair(xp1, xp2, 0);
+      if (r) return { state: r.state, gap: 0, label: null };
+      for (const c of (combos || [])) {
+        const hit = this.playerSeedFromPair(xp1, xp2, c.gap);
+        if (hit && hit.gap === c.gap) return { state: hit.state, gap: c.gap, label: c.label };
+      }
+      // last resort: any gap up to 48, unlabelled
+      r = this.playerSeedFromPair(xp1, xp2, 48);
+      return r ? { state: r.state, gap: r.gap, label: null } : null;
+    }
+
+    /**
      * Strict version: the two draws must be adjacent. Kept because it is what
      * the desktop tool does, and it cannot report a false positive.
      */

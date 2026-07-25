@@ -3,6 +3,7 @@
  * ===================================================================== */
 (function () {
   'use strict';
+  const root = (typeof globalThis !== 'undefined') ? globalThis : window;
   const D = window.ECData, EC = window.ECEnchant, P = window.ECPlanner;
   const $ = s => document.querySelector(s);
   const el = (tag, cls, txt) => { const n = document.createElement(tag); if (cls) n.className = cls; if (txt != null) n.textContent = txt; return n; };
@@ -65,7 +66,7 @@
       S.version = +sel.value; save();
       fillItems($('#out-item'), S.outItem); fillItems($('#plan-item'), S.planItem);
       refreshReadingForm();
-      renderOutcomes(); renderChips();
+      renderOutcomes(); renderChips(); renderRngReference();
     });
   }
 
@@ -191,8 +192,9 @@
 
   $('#btn-reset').addEventListener('click', () => {
     S.readings = []; S.candidates = null; S.xpSeed = null; S.playerState = null; S.seedLog = [];
-    S.captured = [];
-    afterReadingsChange(); renderStatus(); renderSeedLog(); $('#rng-result').innerHTML = '';
+    S.captured = []; S.picks = {};
+    afterReadingsChange(); renderStatus(); renderSeedLog(); renderChips();
+    $('#rng-result').innerHTML = ''; $('#plan-result').innerHTML = '';
   });
 
   // Clears the readings so you can crack a NEW seed, but keeps everything you
@@ -378,25 +380,46 @@
       box.appendChild(mkNotice('bad', '<strong>Both slots hold the same seed.</strong> They must come from two <em>different</em> enchantments. Enchant a dummy item again, crack, and put that new seed in the second slot.'));
       return;
     }
-    // Strict first: exactly-consecutive draws, like both reference tools.
+
+    // Strict first.
     let r = cracker.playerSeedFromPair(a, b, 0);
     if (r) {
       S.playerState = r.state; S.xpSeed = b; save(); renderStatus();
-      box.appendChild(mkNotice('good', '<strong>Player RNG locked on.</strong> Internal state <code>' + hex12(r.state) + '</code>. Every future seed is now predictable — go to <em>Plan a throw</em> to choose one.'));
+      box.appendChild(mkNotice('good', '<strong>Player RNG locked on.</strong> Internal state <code>' + hex12(r.state) + '</code>. Every future seed is now predictable \u2014 go to <em>Plan a throw</em> to choose one.'));
       return;
     }
-    // Fallback: allow a small gap, but be honest that it is a guess.
-    r = cracker.playerSeedFromPair(a, b, 48);
-    if (r) {
-      box.appendChild(mkNotice('warn', '<strong>Those two seeds are not consecutive</strong> — something used the RNG in between (' + r.gap + ' hidden call' + (r.gap === 1 ? '' : 's') + '; a dropped item is 4, armour is 2, a taken hit is 1). ' +
-        'I can lock on assuming exactly that, but if anything random happened it may be wrong. Safer to redo it clean.'));
-      const use = el('button', 'btn btn-sm'); use.style.marginTop = '10px';
-      use.textContent = 'Lock on anyway (gap ' + r.gap + ')';
-      use.addEventListener('click', () => { S.playerState = r.state; S.xpSeed = b; save(); renderStatus(); box.innerHTML = ''; box.appendChild(mkNotice('good', '<strong>Locked on with a gap of ' + r.gap + '.</strong> Watch the first prediction closely; if it is wrong, redo the capture with nothing happening between the two enchantments.')); });
-      box.appendChild(use);
+
+    // Not consecutive: try to name the culprit using known event costs.
+    const events = (root.ECRngEvents ? root.ECRngEvents.advancingEvents(S.version) : []);
+    const combos = [];
+    // single events
+    events.forEach(e => combos.push({ gap: e.calls, label: 'one \u201c' + e.label.toLowerCase() + '\u201d (' + e.calls + ' calls)' }));
+    // a couple of the same (e.g. two accidental drops)
+    events.forEach(e => { combos.push({ gap: e.calls * 2, label: 'two \u201c' + e.label.toLowerCase() + '\u201d (' + (e.calls * 2) + ' calls)' }); });
+    combos.sort((x, y) => x.gap - y.gap);
+
+    const guess = cracker.playerSeedExplained(a, b, combos);
+    if (!guess) {
+      box.appendChild(mkNotice('bad', '<strong>No player state fits these two seeds at all.</strong> Too much happened between them, or a seed was mis-cracked. Reliable recipe: bank your XP, stand somewhere safe and still, then enchant \u2192 crack \u2192 enchant \u2192 crack with nothing in between.'));
+      const b2 = el('button', 'btn btn-sm'); b2.style.marginTop = '10px';
+      b2.textContent = 'What breaks the RNG?';
+      b2.addEventListener('click', () => show('guide'));
+      box.appendChild(b2);
       return;
     }
-    box.appendChild(mkNotice('bad', '<strong>No player state fits these two seeds at all.</strong> Too much happened between them, or one seed was mis-cracked. The reliable recipe: bank your XP first, stand somewhere safe and still, then enchant → crack → enchant → crack with nothing in between.'));
+
+    const cause = guess.label ? guess.label : guess.gap + ' hidden RNG call' + (guess.gap === 1 ? '' : 's');
+    box.appendChild(mkNotice('warn',
+      '<strong>Those seeds are not consecutive.</strong> Best explanation: <strong>' + cause + '</strong> happened between the two enchantments. ' +
+      'I can lock on assuming exactly that \u2014 but if anything else random happened, it will be wrong.'));
+    const use = el('button', 'btn btn-sm'); use.style.marginTop = '10px';
+    use.textContent = 'Lock on assuming ' + (guess.label ? guess.label.split(' (')[0] : 'gap ' + guess.gap);
+    use.addEventListener('click', () => {
+      S.playerState = guess.state; S.xpSeed = b; save(); renderStatus();
+      box.innerHTML = '';
+      box.appendChild(mkNotice('good', '<strong>Locked on.</strong> Watch the first prediction closely; if the outcome is wrong, redo the capture with nothing happening between the two enchantments.'));
+    });
+    box.appendChild(use);
   });
 
   $('#btn-manual').addEventListener('click', () => { const m = $('#manual-box'); m.hidden = !m.hidden; });
@@ -654,6 +677,28 @@
     <p>The method, the reverse engineering and the tables are <a href="https://github.com/Earthcomputer/EnchantmentCracker" target="_blank" rel="noopener">Earthcomputer's EnchantmentCracker</a> and <a href="https://github.com/Earthcomputer/clientcommands" target="_blank" rel="noopener">clientcommands</a>, with speed work by Hexicube. This is a browser port of that work; the simulation was checked line for line against the original Java. If you are willing to run a client-side mod, <code>/cenchant</code> in clientcommands does all of this automatically and is much harder to get wrong.</p>
   `;
 
+  // Build the version-accurate "what touches the RNG" reference into the guide.
+  function renderRngReference() {
+    if (!root.ECRngEvents) return;
+    const host = document.createElement('div');
+    const adv = root.ECRngEvents.advancingEvents(S.version);
+    const rst = root.ECRngEvents.resetEvents();
+    let html = '<h3>What touches the player RNG</h3>' +
+      '<p>These are the only things that move or reset your player\u2019s randomness between two enchantments \u2014 ported straight from clientcommands, and version-accurate for your selected version. If any of them happen between your two cracks, the seeds will not pair.</p>';
+    html += '<p><strong>Spends calls (recoverable, but avoid):</strong></p><ul>';
+    adv.forEach(e => { html += '<li>' + e.icon + ' <strong>' + e.label + '</strong> \u2014 ' + e.calls + ' call' + (e.calls === 1 ? '' : 's') + '. ' + e.note + '</li>'; });
+    html += '</ul><p><strong>Wipes the RNG entirely (do not do these):</strong></p><ul>';
+    rst.forEach(e => { html += '<li>' + e.icon + ' <strong>' + e.label + '</strong> \u2014 ' + e.note + '</li>'; });
+    html += '</ul>';
+    host.innerHTML = html;
+    const guide = $('#guide-body');
+    // remove a previous injection if the version changed
+    const prev = guide.querySelector('.rng-ref');
+    if (prev) prev.remove();
+    host.className = 'rng-ref';
+    guide.appendChild(host);
+  }
+
   /* ------------------------------------------------------------- boot */
   (async () => {
     fillVersions();
@@ -661,7 +706,7 @@
     fillItems($('#out-item'), S.outItem);
     fillItems($('#plan-item'), S.planItem);
     $('#player-level').value = S.playerLevel;
-    renderReadings(); renderStatus(); renderSeedLog(); renderChips();
+    renderReadings(); renderStatus(); renderSeedLog(); renderChips(); renderRngReference();
     await cracker.init('worker.js');
     const t = cracker.threads;
     if (t > 1) $('#threads-note').textContent = 'Searching on ' + t + ' threads — a few seconds.';
