@@ -42,17 +42,25 @@ Opening `index.html` straight off disk still works — the WebAssembly kernel is
 embedded as base64 rather than fetched — but browsers block workers on `file://`,
 so the sweep falls back to a single thread and takes about half a minute.
 
+## Testing
+
+```
+node tests/run.js                          # regression tests, no dependencies
+npm i --no-save jsdom && node tests/e2e.js # drives the real page in a headless DOM
+```
+
+`tests/golden.json` was captured from the code *before* the hint picker and planner changes (60 table outcomes, 40 planner runs, 6 player-RNG recoveries); the current code has to reproduce all of it exactly. `run.js` also checks the planner against the original quadratic algorithm on 200 random cases, the type-ahead matching, and the zero-value handling of the number fields. `e2e.js` types through the keyboard flow on the actual page.
+
 ## Verifying it
 
-The simulation is not a re-derivation from the wiki; it is a port, checked against
-the original Java. the checks are in the [full project](https://github.com/Earthcomputer/EnchantmentCracker):
+The simulation is a port, checked against Earthcomputer's Java while it was built. The reference checks below ran in the author's development setup; the scripts and the compiled reference data are **not** part of this repository.
 
-| script | what it proves |
-| --- | --- |
-| `verify.js` | costs, full enchantment lists and GUI clues match Earthcomputer's `Enchantments.java` — **4745 / 4745** random cases across all 11 version brackets and 21 item types |
-| `verify-plan.js` | the throw planner matches `EnchCrackerWindow`'s calculate loop — **349 / 349** |
-| `verify-kernel.js` | the WebAssembly kernel agrees with the JS engine on 100k cost cases; full sweeps recover the target seed; player-state recovery **5000 / 5000** |
-| `verify-fullcrack.js` | readings in, one correct seed out, through the real `Cracker` class |
+| script                | what it proves                                                                                                                                                        |
+|-----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `verify.js`           | costs, full enchantment lists and GUI clues match Earthcomputer's `Enchantments.java` — **4745 / 4745** random cases across all 11 version brackets and 21 item types |
+| `verify-plan.js`      | the throw planner matches `EnchCrackerWindow`'s calculate loop — **349 / 349**                                                                                        |
+| `verify-kernel.js`    | the WebAssembly kernel agrees with the JS engine on 100k cost cases; full sweeps recover the target seed; player-state recovery **5000 / 5000**                       |
+| `verify-fullcrack.js` | readings in, one correct seed out, through the real `Cracker` class                                                                                                   |
 
 The reference data comes from compiling the upstream Java directly:
 
@@ -60,12 +68,9 @@ The reference data comes from compiling the upstream Java directly:
 git clone https://github.com/Earthcomputer/EnchantmentCracker
 cp EnchantmentCracker/src/enchcracker/{Enchantments,Items,Versions,Materials}.java oracle/enchcracker/
 javac -d out oracle/enchcracker/*.java && java -cp out enchcracker.Oracle > ref.txt
-node tools/verify.js ref.txt
 ```
 
-`tools/build-kernel.js` regenerates `assets/js/kernel.js` (needs `npm i wabt`); the
-generated WebAssembly text is written alongside it as `cracker.wat` so the kernel
-is reviewable.
+`kernel.js` was generated from a hand-written WebAssembly build script that is also not included here.
 
 ## Layout
 
@@ -74,14 +79,17 @@ index.html
 style.css
 data.js       item + enchantment tables (port of Items.java, Enchantments.java)
 enchant.js    java.util.Random and the enchanting table simulation
+rngevents.js  what advances or resets the player RNG
 kernel.js     WebAssembly brute-force kernel, base64 embedded
 cracker.js    worker pool, sweep orchestration, player RNG recovery
 planner.js    throw / bookshelf / slot search
 worker.js     scan worker
+hintpicker.js type-ahead picker for the enchantment hints
 ui.js         the interface
+tests/        run.js, e2e.js, golden.json
 ```
 
-All nine files live at the repository root. Every one is required.
+Every file above except `tests/` lives at the repository root and is required.
 
 ## What it will not do
 

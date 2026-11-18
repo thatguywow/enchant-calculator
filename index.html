@@ -52,6 +52,8 @@
   <main class="main">
   <div class="wrap">
 
+      <div id="mobile-settings"></div>
+
     <!-- =================================================== crack view -->
     <section class="view is-active" id="view-crack" role="tabpanel">
       <header class="page-head">
@@ -77,16 +79,27 @@
               <select id="in-item"></select>
             </label>
           </div>
-          <div class="row" style="margin-top:10px">
-            <label class="field"><span class="field-label">Top slot</span><input type="number" id="in-c1" min="0" max="30" inputmode="numeric"></label>
-            <label class="field"><span class="field-label">Middle slot</span><input type="number" id="in-c2" min="0" max="30" inputmode="numeric"></label>
-            <label class="field"><span class="field-label">Bottom slot</span><input type="number" id="in-c3" min="0" max="30" inputmode="numeric"></label>
+          <div class="edit-banner" id="edit-banner" hidden>
+            <span id="edit-banner-text"></span>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-edit-cancel">Cancel edit</button>
           </div>
-          <div class="row" style="margin-top:10px">
-            <label class="field"><span class="field-label">Top hint &nbsp;·&nbsp; hover the slot in game</span><select id="in-h1"></select></label>
-            <label class="field"><span class="field-label">Middle hint</span><select id="in-h2"></select></label>
-            <label class="field"><span class="field-label">Bottom hint</span><select id="in-h3"></select></label>
-            <div class="row-fixed"><button class="btn btn-primary" type="submit">Add reading</button></div>
+          <div class="slots">
+            <div class="slot-col">
+              <label class="field"><span class="field-label">Top slot</span><input type="number" id="in-c1" min="0" max="30" inputmode="numeric"></label>
+              <div class="field hp-field"><span class="field-label" id="in-h1-lbl">Top hint</span><select id="in-h1" aria-labelledby="in-h1-lbl"></select></div>
+            </div>
+            <div class="slot-col">
+              <label class="field"><span class="field-label">Middle slot</span><input type="number" id="in-c2" min="0" max="30" inputmode="numeric"></label>
+              <div class="field hp-field"><span class="field-label" id="in-h2-lbl">Middle hint</span><select id="in-h2" aria-labelledby="in-h2-lbl"></select></div>
+            </div>
+            <div class="slot-col">
+              <label class="field"><span class="field-label">Bottom slot</span><input type="number" id="in-c3" min="0" max="30" inputmode="numeric"></label>
+              <div class="field hp-field"><span class="field-label" id="in-h3-lbl">Bottom hint</span><select id="in-h3" aria-labelledby="in-h3-lbl"></select></div>
+            </div>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <div class="row-fixed"><button class="btn btn-primary" type="submit" id="btn-add-reading">Add reading</button></div>
+            <p class="panel-note hp-help">Per slot: type the cost and press <kbd>Enter</kbd>, then the hint&rsquo;s name &mdash; <kbd>Tab</kbd> or <kbd>&darr;</kbd> step through the matches, <kbd>Enter</kbd> picks one, a digit sets the level, <kbd>Enter</kbd> moves on. <em>lure 2</em> works too. <kbd>Enter</kbd> on an empty hint skips it; after the bottom slot it adds the reading.</p>
           </div>
         </form>
 
@@ -169,7 +182,7 @@
           <label class="field row-fixed" style="flex:0 0 150px"><span class="field-label">Max items to throw</span><input type="number" id="plan-maxthrows" min="0" max="4096" value="512"></label>
         </div>
         <div style="margin-top:16px">
-          <div class="field-label" style="margin-bottom:8px">Click once to want it, twice to refuse it</div>
+          <div class="field-label" style="margin-bottom:8px">Click to cycle: best level &rarr; lower levels &rarr; refuse &rarr; clear</div>
           <div class="chips" id="plan-chips"></div>
         </div>
         <div class="row" style="margin-top:16px">
@@ -200,6 +213,7 @@
 <script src="kernel.js"></script>
 <script src="cracker.js"></script>
 <script src="planner.js"></script>
+<script src="hintpicker.js"></script>
 <script src="ui.js"></script>
 </body>
 </html>
