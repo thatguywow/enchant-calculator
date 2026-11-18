@@ -30,6 +30,9 @@
 
 * { box-sizing: border-box; }
 
+/* author display rules (.btn, .hp-level …) would otherwise beat the UA [hidden] rule */
+[hidden] { display: none !important; }
+
 html, body { height: 100%; }
 
 body {
@@ -182,6 +185,13 @@ select { appearance: none; background-image: linear-gradient(45deg, transparent 
   font-family: var(--mono); font-size: 13px;
 }
 .reading.is-dupe { border-color: rgba(242,168,59,.55); }
+.reading.is-editing { border-color: var(--arcane); background: rgba(164,124,243,.10); }
+.reading-actions { display: flex; gap: 6px; }
+.edit-banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  margin-top: 12px; padding: 8px 12px; font-size: 13px;
+  border: 1px solid rgba(242,168,59,.5); border-radius: var(--r-ctl); background: rgba(242,168,59,.08);
+}
 .reading-shelves { color: var(--arcane); }
 .reading-costs { color: var(--parchment); letter-spacing: .04em; }
 .reading-costs em { color: var(--muted); font-style: normal; }
@@ -314,7 +324,8 @@ table.grid tr.is-hit td { background: rgba(127,224,74,.07); }
     padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
     border-right: 0; border-top: 1px solid var(--line);
   }
-  .brand, .rail-foot { display: none; }
+  .brand { display: none; }
+  .rail .rail-foot { display: none; }          /* moved into #mobile-settings by ui.js */
   .nav { flex-direction: row; flex: 1; gap: 4px; }
   .nav-item { flex-direction: column; gap: 2px; justify-content: center; font-size: 11px; padding: 6px 4px; text-align: center; }
   .nav-item[aria-current='true'] { box-shadow: inset 0 2px 0 var(--arcane); }
@@ -347,4 +358,81 @@ table.grid tr.is-hit td { background: rgba(127,224,74,.07); }
 @media (max-width: 640px) {
   .capture { flex-direction: column; }
   .capture-arrow { transform: rotate(90deg); }
+}
+
+/* ------------------------------------------------- reading form: slots */
+.slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-top: 12px; }
+.slot-col {
+  display: flex; flex-direction: column; gap: 10px; min-width: 0;
+  padding: 12px; border: 1px solid var(--line); border-radius: var(--r-ctl);
+  background: rgba(12,10,20,.35);
+}
+.slot-col:focus-within { border-color: rgba(164,124,243,.55); }
+.hp-field { display: flex; flex-direction: column; gap: 5px; }
+.hp-help { margin: 0; flex: 1 1 260px; align-self: center; }
+kbd {
+  font-family: var(--mono); font-size: 11.5px; padding: 0 5px; border-radius: 4px;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--parchment);
+}
+@media (max-width: 760px) { .slots { grid-template-columns: 1fr; } }
+
+/* ------------------------------------------------- hint picker (hintpicker.js) */
+.hp { position: relative; display: flex; gap: 6px; align-items: stretch; }
+.hp-name { flex: 1 1 auto; min-width: 0; padding-right: 30px; }
+.hp-level { flex: 0 0 66px; width: 66px; text-align: center; padding-left: 4px; padding-right: 4px; font-size: 13px; }
+.hp-level::placeholder { font-size: 12px; }
+.hp.is-pending .hp-level { border-color: var(--ember); box-shadow: 0 0 0 1px rgba(242,168,59,.35); }
+.hp.is-set .hp-name { border-color: rgba(127,224,74,.45); }
+.hp-clear {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  right: 6px; width: 22px; height: 22px; padding: 0; line-height: 1;
+  border: 0; border-radius: 4px; background: none; color: var(--muted); font-size: 17px; cursor: pointer;
+}
+.hp:has(.hp-level:not([hidden])) .hp-clear { right: 78px; }
+.hp-clear:hover { color: var(--parchment); }
+.hp-list {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 60;
+  margin: 0; padding: 4px; list-style: none;
+  max-height: min(248px, 45vh); overflow-y: auto; overscroll-behavior: contain;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--r-ctl);
+  box-shadow: 0 16px 36px rgba(0,0,0,.55);
+}
+.hp-list.is-up { top: auto; bottom: calc(100% + 4px); }
+.hp-opt {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 7px 9px; border-radius: 5px; cursor: pointer; font-size: 14px;
+}
+.hp-opt[aria-selected='true'] { background: rgba(164,124,243,.2); }
+.hp-opt:hover { background: rgba(164,124,243,.12); }
+.hp-opt mark { background: none; color: var(--xp); font-weight: 600; }
+.hp-lvls { display: flex; gap: 4px; flex: none; }
+.hp-lvl {
+  font-family: var(--mono); font-size: 11px; min-width: 24px; text-align: center;
+  padding: 2px 5px; border: 1px solid var(--line); border-radius: 4px;
+  background: var(--obsidian); color: var(--muted);
+}
+.hp-lvl:hover { border-color: var(--arcane); color: var(--parchment); }
+.hp-empty { padding: 9px 10px; color: var(--muted); font-size: 13px; }
+@media (max-width: 900px) {
+  .hp-opt { padding: 11px 10px; }
+  .hp-lvl { padding: 6px 9px; min-width: 32px; }
+}
+
+/* -------------------------------------------- settings strip on small screens */
+#mobile-settings { display: none; }
+@media (max-width: 900px) {
+  #mobile-settings { display: block; margin-bottom: 18px; }
+  #mobile-settings .rail-foot {
+    margin: 0; padding: 14px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px;
+    border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--panel);
+  }
+  #mobile-settings .status { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
+  #mobile-settings .status .pill { flex: 1 1 140px; }
+}
+
+/* ---------------------------------------------------------- outcomes: hint tag */
+.clue-mark {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .06em; margin-left: 7px;
+  padding: 0 5px; border-radius: 4px; vertical-align: 1px;
+  color: var(--arcane); border: 1px solid rgba(164,124,243,.45);
 }

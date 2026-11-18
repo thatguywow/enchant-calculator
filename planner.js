@@ -87,13 +87,17 @@
     const first = knowSeed ? NO_DUMMY : 0;
     const last = knowPlayer ? maxThrows : NO_DUMMY;
 
+    // `base` is the player state after `throws * 4` steps. Advancing it by 4
+    // per iteration keeps the whole search linear in maxThrows (recomputing
+    // from the start each time was quadratic).
+    let base = state;
     for (let throws = first; throws <= last; throws++) {
       let xpSeed;
       if (throws === NO_DUMMY) {
         xpSeed = opts.xpSeed;
       } else {
         // throws items thrown (4 steps each) then the dummy enchantment (1 step)
-        xpSeed = EC.stateToInt(EC.lcgAdvance(state, throws * 4 + 1));
+        xpSeed = EC.stateToInt(EC.lcgNext(base));
       }
       const dummyLevels = throws === NO_DUMMY ? 0 : 1;
 
@@ -117,6 +121,7 @@
           if (results.length >= maxResults) return { results, searched };
         }
       }
+      if (throws >= 0) base = EC.lcgAdvance(base, 4);
     }
     return { results, searched };
   }
@@ -134,7 +139,19 @@
     return { playerState: s, xpSeed: EC.stateToInt(s) };
   }
 
-  const API = { NO_DUMMY, maxLevelInTable, offerable, outcomes, matches, plan, applyPlan };
+  /**
+   * Read an integer from a form field. A blank or non-numeric field gives the
+   * default; 0 is a real value and stays 0 (the old `+value || default` turned
+   * "0 bookshelves" into 15 and "0 throws" into 512).
+   */
+  function clampInt(raw, dflt, min, max) {
+    if (raw === null || raw === undefined || String(raw).trim() === '') return dflt;
+    const n = Math.trunc(Number(raw));
+    if (!isFinite(n)) return dflt;
+    return Math.max(min, Math.min(max, n));
+  }
+
+  const API = { NO_DUMMY, maxLevelInTable, offerable, outcomes, matches, plan, applyPlan, clampInt };
   root.ECPlanner = API;
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

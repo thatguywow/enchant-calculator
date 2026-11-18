@@ -46,6 +46,9 @@
 
   const cracker = new window.ECCracker.Cracker();
   let busy = false;
+  let pickers = [];                     // type-ahead hint pickers (hintpicker.js); empty = plain selects
+  const pickerAt = [];                  // the same pickers by slot (0..2); a slot may be missing
+  let editIndex = null;                 // index of the reading being edited, or null
 
   /* ------------------------------------------------------- navigation */
   function show(view) {
@@ -105,19 +108,57 @@
     const item = fillItems($('#in-item'), S.readItem || 'book');
     S.readItem = item;
     ['#in-h1', '#in-h2', '#in-h3'].forEach(sel => hintOptions($(sel), item));
+    pickers.forEach(p => p.refresh());
   }
+
+  function submitReadingForm() {
+    const f = $('#reading-form');
+    if (f.requestSubmit) f.requestSubmit(); else f.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+  }
+
+  // Cost -> hint per slot, so Enter on a finished hint moves on to the next
+  // slot's cost, and on the last slot adds the reading.
+  function setupPickers() {
+    if (!window.ECHintPicker) return;
+    ['#in-h1', '#in-h2', '#in-h3'].forEach((sel, i) => {
+      try {
+        const p = window.ECHintPicker.enhance($(sel), { onAdvance: () => { if (i < 2) $('#in-c' + (i + 2)).focus(); else submitReadingForm(); } });
+        pickers.push(p); pickerAt[i] = p;
+      } catch (e) {
+        const stray = $(sel).parentNode.querySelector('.hp');      // leave the plain <select> working
+        if (stray) stray.remove();
+        $(sel).hidden = false; $(sel).removeAttribute('aria-hidden'); $(sel).tabIndex = 0;
+        console.warn('hint picker unavailable for ' + sel, e);
+      }
+    });
+  }
+  const focusHint = i => { if (pickerAt[i]) pickerAt[i].focus(); else $('#in-h' + (i + 1)).focus(); };
+  // Enter on a cost moves on to that slot's hint; it must not submit a half-finished reading.
+  ['#in-c1', '#in-c2', '#in-c3'].forEach((sel, i) => $(sel).addEventListener('keydown', ev => {
+    if (ev.key === 'Enter') { ev.preventDefault(); focusHint(i); }
+  }));
   $('#in-item') && $('#in-item').addEventListener('change', () => { S.readItem = $('#in-item').value; save(); refreshReadingForm(); });
 
   function fillShelves() {
     const sel = $('#in-shelves');
     sel.innerHTML = '';
     for (let i = 0; i <= 15; i++) {
-      const used = S.readings.some(r => r.bookshelves === i);
+      const used = S.readings.some((r, j) => j !== editIndex && r.bookshelves === i);
       const o = el('option', null, i + (used ? '  (already read)' : ''));
       o.value = i; sel.appendChild(o);
     }
-    const unused = [...Array(16).keys()].find(i => !S.readings.some(r => r.bookshelves === i));
-    sel.value = unused === undefined ? 15 : unused;
+    sel.value = editIndex !== null && S.readings[editIndex] ? S.readings[editIndex].bookshelves : nextShelves();
+  }
+
+  // Default for the next reading: one shelf fewer than the last one (blocking a
+  // shelf is the usual move), starting from a full 15 when nothing is entered.
+  function nextShelves() {
+    if (!S.readings.length) return 15;
+    const used = new Set(S.readings.map(r => r.bookshelves));
+    const last = S.readings[S.readings.length - 1].bookshelves;
+    for (let i = last - 1; i >= 0; i--) if (!used.has(i)) return i;
+    for (let i = last + 1; i <= 15; i++) if (!used.has(i)) return i;
+    return 15;
   }
 
   /* --------------------------------------------------------- readings */
@@ -129,7 +170,7 @@
     }
     S.readings.forEach((r, i) => {
       const dupe = S.readings.filter(x => x.bookshelves === r.bookshelves).length > 1;
-      const row = el('div', 'reading' + (dupe ? ' is-dupe' : ''));
+      const row = el('div', 'reading' + (dupe ? ' is-dupe' : '') + (i === editIndex ? ' is-editing' : ''));
       const left = el('div');
       left.appendChild(el('span', 'reading-shelves', r.bookshelves + (r.bookshelves === 1 ? ' shelf' : ' shelves')));
       row.appendChild(left);
@@ -138,9 +179,19 @@
       costs.innerHTML = [r.c1, r.c2, r.c3].map(c => c === 0 ? '<em>—</em>' : c).join(' &nbsp;/&nbsp; ') +
         (nClues ? ' <em>+' + nClues + ' hint' + (nClues > 1 ? 's' : '') + '</em>' : '');
       row.appendChild(costs);
+      const actions = el('div', 'reading-actions');
+      const edit = el('button', 'btn btn-ghost btn-sm', i === editIndex ? 'Editing' : 'Edit');
+      edit.type = 'button'; edit.disabled = i === editIndex;
+      edit.title = 'Load this reading back into the form to correct it';
+      edit.addEventListener('click', () => startEdit(i));
       const del = el('button', 'btn btn-ghost btn-sm btn-danger', 'Remove');
-      del.addEventListener('click', () => { S.readings.splice(i, 1); afterReadingsChange(); });
-      row.appendChild(del);
+      del.type = 'button';
+      del.addEventListener('click', () => {
+        if (editIndex !== null) { if (i === editIndex) { editIndex = null; clearForm(); } else if (i < editIndex) editIndex--; }
+        S.readings.splice(i, 1); afterReadingsChange();
+      });
+      actions.append(edit, del);
+      row.appendChild(actions);
       box.appendChild(row);
     });
 
@@ -153,7 +204,40 @@
     }
     $('#btn-crack').disabled = busy || distinct < 2;
     fillShelves();
+    paintEditState();
   }
+
+  /* ----------------------------------------------- editing a reading */
+  function clearForm() {
+    ['#in-c1', '#in-c2', '#in-c3'].forEach(s => $(s).value = '');
+    ['#in-h1', '#in-h2', '#in-h3'].forEach(s => $(s).value = '');
+    pickers.forEach(p => p.refresh());
+  }
+  function paintEditState() {
+    const on = editIndex !== null && !!S.readings[editIndex];
+    $('#edit-banner').hidden = !on;
+    if (on) $('#edit-banner-text').textContent = 'Editing reading ' + (editIndex + 1) + ' of ' + S.readings.length + ' \u2014 saving replaces it.';
+    $('#btn-add-reading').textContent = on ? 'Save changes' : 'Add reading';
+  }
+  function startEdit(i) {
+    const r = S.readings[i];
+    if (!r) return;
+    editIndex = i;
+    if (r.item) S.readItem = r.item;
+    save();
+    refreshReadingForm();                                   // item + the hint lists for that item
+    $('#in-c1').value = r.c1; $('#in-c2').value = r.c2; $('#in-c3').value = r.c3;
+    [0, 1, 2].forEach(k => {
+      const c = (r.clues || [])[k];
+      $('#in-h' + (k + 1)).value = c ? c.ench + ':' + c.level : '';
+    });
+    pickers.forEach(p => p.refresh());
+    renderReadings();                                       // picks the shelf count, marks the row
+    $('#in-c1').focus();
+    if ($('#reading-form').scrollIntoView) $('#reading-form').scrollIntoView({ block: 'nearest' });
+  }
+  function cancelEdit() { editIndex = null; clearForm(); renderReadings(); }
+  $('#btn-edit-cancel').addEventListener('click', cancelEdit);
 
   function afterReadingsChange() { S.candidates = null; save(); renderReadings(); $('#crack-result').innerHTML = ''; }
 
@@ -169,6 +253,8 @@
     if (vals.some(v => v === '')) { $('#in-c1').focus(); return; }
     const [c1, c2, c3] = vals.map(Number);
     if ([c1, c2, c3].some(c => isNaN(c) || c < 0 || c > 30)) return;
+    const pending = pickers.find(p => p.isPending());
+    if (pending) { pending.focus(); return; }                // a hint with no level yet
     const clues = ['#in-h1', '#in-h2', '#in-h3'].map(sel => {
       const v = $(sel).value;
       if (!v) return null;
@@ -176,10 +262,11 @@
       return { ench, level: +level };
     });
     const reading = { bookshelves: b, c1, c2, c3, item: $('#in-item').value, clues };
-    S.readings.push(reading);
-    ['#in-c1', '#in-c2', '#in-c3'].forEach(s => $(s).value = '');
-    ['#in-h1', '#in-h2', '#in-h3'].forEach(s => $(s).value = '');
-    if (S.candidates && S.candidates.length) {
+    const editing = editIndex !== null && !!S.readings[editIndex];
+    if (editing) S.readings[editIndex] = reading; else S.readings.push(reading);
+    editIndex = null;
+    clearForm();
+    if (!editing && S.candidates && S.candidates.length) {
       // a sweep has already run: narrow the survivors instantly
       S.candidates = cracker.filterByClues(cracker.filter(S.candidates, [reading]), [reading], S.version);
       save(); renderReadings();
@@ -187,11 +274,11 @@
     } else {
       afterReadingsChange();
     }
-    $('#in-shelves').focus();
+    $('#in-c1').focus();
   });
 
   $('#btn-reset').addEventListener('click', () => {
-    S.readings = []; S.candidates = null; S.xpSeed = null; S.playerState = null; S.seedLog = [];
+    editIndex = null; clearForm(); S.readings = []; S.candidates = null; S.xpSeed = null; S.playerState = null; S.seedLog = [];
     S.captured = []; S.picks = {};
     afterReadingsChange(); renderStatus(); renderSeedLog(); renderChips();
     $('#rng-result').innerHTML = ''; $('#plan-result').innerHTML = '';
@@ -202,7 +289,7 @@
   // missing: cracking the second seed for the player RNG needs fresh readings
   // but must NOT wipe the first seed.
   function newReadingRound() {
-    S.readings = []; S.candidates = null;
+    editIndex = null; clearForm(); S.readings = []; S.candidates = null;
     save(); renderReadings(); $('#crack-result').innerHTML = '';
     const form = $('#reading-form');
     if (form && form.scrollIntoView) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -471,7 +558,7 @@
     }
     S.outItem = fillItems($('#out-item'), S.outItem);
     const item = S.outItem, version = S.version;
-    const maxShelves = Math.max(0, Math.min(15, +$('#out-maxshelves').value || 15));
+    const maxShelves = P.clampInt($('#out-maxshelves').value, 15, 0, 15);
 
     // highlight picker
     const hi = $('#out-highlight'), prev = hi.value;
@@ -503,7 +590,14 @@
           const isHit = hi.value && e.ench === hi.value;
           if (isHit) hit = true;
           const n = el('span', 'ench' + (isHit ? ' is-hit' : ''));
-          if (animate) decode(n, enchName(e), (seq++) * 16); else n.textContent = enchName(e);
+          const label = el('span');
+          if (animate) decode(label, enchName(e), (seq++) * 16); else label.textContent = enchName(e);
+          n.appendChild(label);
+          if (slot.clue && slot.clue.ench === e.ench && slot.clue.level === e.level) {
+            const mark = el('span', 'clue-mark', 'hint');
+            mark.title = 'The game shows this one when you hover the slot';
+            n.appendChild(mark);
+          }
           td.appendChild(n);
         });
         tr.appendChild(td);
@@ -521,13 +615,28 @@
   ['#out-item', '#out-highlight', '#out-maxshelves'].forEach(s => $(s).addEventListener('change', () => { S.outItem = $('#out-item').value; renderOutcomes(); }));
 
   /* -------------------------------------------------------------- plan */
+  // Drop picks the current item/version can't offer (and cap levels at what the
+  // table can reach) so hidden requirements never reach the planner.
+  function prunePicks() {
+    const max = {};
+    P.offerable(S.planItem, S.version).forEach(o => { max[o.ench] = o.max; });
+    let changed = false;
+    Object.keys(S.picks).forEach(k => {
+      if (!(k in max)) { delete S.picks[k]; changed = true; }
+      else if (S.picks[k] > max[k]) { S.picks[k] = max[k]; changed = true; }
+    });
+    if (changed) save();
+  }
+
   function renderChips() {
     S.planItem = fillItems($('#plan-item'), S.planItem);
+    prunePicks();
     const box = $('#plan-chips'); box.innerHTML = '';
     P.offerable(S.planItem, S.version).forEach(o => {
       const cur = S.picks[o.ench];
       const chip = el('button', 'chip' + (cur > 0 ? ' is-wanted' : cur === -1 ? ' is-unwanted' : ''));
       chip.type = 'button';
+      chip.title = 'Click to cycle: best level, lower levels, refuse, clear';
       chip.appendChild(el('span', null, D.PRETTY[o.ench]));
       const lvl = el('span', 'chip-lvl', cur > 0 ? D.roman(cur) : cur === -1 ? 'no' : '·');
       chip.appendChild(lvl);
@@ -552,15 +661,16 @@
       box.appendChild(mkNotice('warn', '<strong>Nothing to plan with yet.</strong> Crack the seed first.'));
       return;
     }
+    prunePicks();
     const wanted = [], unwanted = [];
     Object.keys(S.picks).forEach(e => { if (S.picks[e] === -1) unwanted.push(e); else wanted.push({ ench: e, level: S.picks[e] }); });
 
     const out = P.plan({
       xpSeed: S.xpSeed, playerState: S.playerState,
       item: S.planItem, version: S.version, wanted, unwanted,
-      minShelves: 0, maxShelves: Math.max(0, Math.min(15, +$('#plan-maxshelves').value || 15)),
+      minShelves: 0, maxShelves: P.clampInt($('#plan-maxshelves').value, 15, 0, 15),
       maxSlot: 3, playerLevel: S.playerLevel,
-      maxThrows: Math.max(0, Math.min(4096, +$('#plan-maxthrows').value || 512)),
+      maxThrows: P.clampInt($('#plan-maxthrows').value, 512, 0, 4096),
       maxResults: 6
     });
 
@@ -620,6 +730,18 @@
   }
 
   /* -------------------------------------------------------------- misc */
+  // On narrow screens the sidebar becomes a bottom bar with no room for the
+  // version / XP-level / status block, so that block moves to the top of the
+  // page (same elements, same listeners) and back again on wide screens.
+  (function placeSettings() {
+    const foot = document.querySelector('.rail-foot'), slot = $('#mobile-settings'), rail = document.querySelector('.rail');
+    if (!foot || !slot || !rail || !window.matchMedia) return;
+    const mq = window.matchMedia('(max-width: 900px)');
+    const place = () => (mq.matches ? slot : rail).appendChild(foot);
+    place();
+    if (mq.addEventListener) mq.addEventListener('change', place); else if (mq.addListener) mq.addListener(place);
+  })();
+
   $('#player-level').addEventListener('input', e => {
     S.playerLevel = Math.max(0, +e.target.value || 0); save();
     if ($('#view-outcomes').classList.contains('is-active')) renderOutcomes();
@@ -702,6 +824,7 @@
   /* ------------------------------------------------------------- boot */
   (async () => {
     fillVersions();
+    setupPickers();
     refreshReadingForm();
     fillItems($('#out-item'), S.outItem);
     fillItems($('#plan-item'), S.planItem);

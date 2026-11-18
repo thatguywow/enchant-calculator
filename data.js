@@ -3,7 +3,8 @@
  *
  *  Direct port of Earthcomputer/EnchantmentCracker:
  *    src/enchcracker/Items.java, Enchantments.java, Versions.java
- *  Verified byte-for-byte against the original Java by tools/verify.js.
+ *  Checked against the original Java during development (see README);
+ *  tests/run.js guards it against regressions.
  * ===================================================================== */
 (function (root) {
   'use strict';
