@@ -730,6 +730,16 @@
   }
 
   /* -------------------------------------------------------------- misc */
+  // The "learn your player RNG" steps at the top of the Crack page: open by
+  // default, and remembers if you folded them away.
+  (function rngCallout() {
+    const box = $('#rng-callout');
+    if (!box) return;
+    try { if (localStorage.getItem('rngCalloutClosed') === '1') box.open = false; } catch (e) { /* storage blocked */ }
+    box.addEventListener('toggle', () => { try { localStorage.setItem('rngCalloutClosed', box.open ? '0' : '1'); } catch (e) { /* ignore */ } });
+    box.querySelectorAll('[data-goto]').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); show(a.dataset.goto); }));
+  })();
+
   // On narrow screens the sidebar becomes a bottom bar with no room for the
   // version / XP-level / status block, so that block moves to the top of the
   // page (same elements, same listeners) and back again on wide screens.

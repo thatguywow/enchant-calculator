@@ -168,6 +168,20 @@ const type = (w, el, text) => { el.value = text; el.dispatchEvent(new w.Event('i
   ok('desktop: settings stay in the sidebar', d.querySelector('.rail').contains(d.getElementById('version')));
   dom.window.close();
 
+  /* ---------- RNG steps callout at the top of the Crack page ---------- */
+  dom = await load(); w = dom.window; d = w.document;
+  const call = d.getElementById('rng-callout');
+  ok('callout sits at the top of Crack, under the title, above step 01', !!call && call.previousElementSibling.tagName === 'HEADER' && call.nextElementSibling.querySelector('.step').textContent === '01');
+  ok('callout is open by default with the 5 steps', call.open && call.querySelectorAll('ol li').length === 5 && /^Enchant a dummy item/.test(call.querySelector('li').textContent) && /Work out the player RNG/.test(call.querySelectorAll('li')[4].textContent));
+  call.open = false; call.dispatchEvent(new w.Event('toggle'));
+  ok('folding it away is remembered', w.localStorage.getItem('rngCalloutClosed') === '1');
+  call.querySelector('[data-goto]').click();
+  ok('its link jumps to the guide', d.getElementById('view-guide').classList.contains('is-active'));
+  dom.window.close();
+  dom = await load({ store: { rngCalloutClosed: 1 } }); d = dom.window.document;
+  ok('stays folded on the next visit', d.getElementById('rng-callout').open === false);
+  dom.window.close();
+
   /* ---------- plan + outcomes with a known seed ---------- */
   dom = await load({ store: { xpSeed: 123456789, picks: { lunge: 3, sharpness: 5 }, planItem: 'diamond_sword', outItem: 'diamond_sword' } });
   w = dom.window; d = w.document;
